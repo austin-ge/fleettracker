@@ -1,10 +1,75 @@
 // Using Node.js built-in fetch (available in Node 18+)
+const fs = require('fs');
+const path = require('path');
 
 class OpenSkyClient {
-  constructor(username = null, password = null) {
+  constructor(credentialsPath = null) {
     this.baseUrl = 'https://opensky-network.org/api';
-    this.username = username;
-    this.password = password;
+    this.authUrl = 'https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token';
+    this.credentials = null;
+    this.accessToken = null;
+    this.tokenExpiry = null;
+
+    // Load OAuth credentials if provided
+    if (credentialsPath) {
+      try {
+        const fullPath = path.resolve(credentialsPath);
+        const credData = fs.readFileSync(fullPath, 'utf8');
+        this.credentials = JSON.parse(credData);
+        console.log('OpenSky OAuth credentials loaded');
+      } catch (error) {
+        console.warn(`Could not load OpenSky credentials: ${error.message}`);
+      }
+    }
+  }
+
+  /**
+   * Get OAuth2 access token (cached, refreshes when expired)
+   */
+  async getAccessToken() {
+    // Return cached token if still valid
+    if (this.accessToken && this.tokenExpiry && Date.now() < this.tokenExpiry) {
+      return this.accessToken;
+    }
+
+    // Request new token
+    if (!this.credentials || !this.credentials.clientId || !this.credentials.clientSecret) {
+      console.warn('No OAuth credentials available, using anonymous access');
+      return null;
+    }
+
+    try {
+      const params = new URLSearchParams({
+        grant_type: 'client_credentials',
+        client_id: this.credentials.clientId,
+        client_secret: this.credentials.clientSecret
+      });
+
+      const response = await fetch(this.authUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: params
+      });
+
+      if (!response.ok) {
+        console.error(`OAuth token request failed: ${response.status} ${response.statusText}`);
+        return null;
+      }
+
+      const data = await response.json();
+      this.accessToken = data.access_token;
+      // Tokens expire in 30 minutes, refresh 5 minutes early
+      this.tokenExpiry = Date.now() + ((data.expires_in - 300) * 1000);
+
+      console.log('OpenSky access token obtained');
+      return this.accessToken;
+
+    } catch (error) {
+      console.error('Error getting OAuth token:', error.message);
+      return null;
+    }
   }
 
   async fetchFleetStates(icao24Array) {
@@ -16,10 +81,10 @@ class OpenSkyClient {
       // Prepare headers
       const headers = {};
 
-      // Add authentication if credentials provided
-      if (this.username && this.password) {
-        const auth = Buffer.from(`${this.username}:${this.password}`).toString('base64');
-        headers['Authorization'] = `Basic ${auth}`;
+      // Get OAuth2 access token
+      const token = await this.getAccessToken();
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
       }
 
       // Make API request
@@ -118,9 +183,9 @@ class OpenSkyClient {
       const url = `${this.baseUrl}/flights/aircraft?icao24=${icao24.toLowerCase()}&begin=${beginTimestamp}&end=${endTimestamp}`;
 
       const headers = {};
-      if (this.username && this.password) {
-        const auth = Buffer.from(`${this.username}:${this.password}`).toString('base64');
-        headers['Authorization'] = `Basic ${auth}`;
+      const token = await this.getAccessToken();
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
       }
 
       const response = await fetch(url, { headers });

@@ -3,18 +3,15 @@ const path = require('path');
 const cron = require('node-cron');
 const config = require('./config');
 const db = require('./database/db');
-const OpenSkyClient = require('./services/opensky');
+const DataFetcher = require('./services/dataFetcher');
 const tracker = require('./services/tracker');
 
 // Initialize Express app
 const app = express();
 const PORT = config.server.port;
 
-// Initialize OpenSky API client
-const openskyClient = new OpenSkyClient(
-  config.opensky.username,
-  config.opensky.password
-);
+// Initialize hybrid data fetcher (dump1090 + OpenSky)
+const dataFetcher = new DataFetcher(config);
 
 // Serve static files from public directory
 app.use(express.static(path.join(__dirname, 'public')));
@@ -70,19 +67,24 @@ app.get('/api/statistics', (req, res) => {
 
 // Background polling function
 async function pollFleetData() {
-  console.log('Polling OpenSky for fleet data...');
+  console.log('Polling for fleet data...');
 
   try {
     // Get ICAO24 codes from config
     const icao24Array = config.aircraft.map(aircraft => aircraft.icao24);
 
-    // Fetch data from OpenSky
-    const result = await openskyClient.fetchFleetStates(icao24Array);
+    // Fetch data from hybrid sources (dump1090 + OpenSky fallback)
+    const result = await dataFetcher.fetchFleetData(icao24Array);
 
     // Handle errors
     if (result.error) {
-      console.error(`OpenSky API error: ${result.error}`);
-      return;
+      console.error(`Data fetch error: ${result.error}`);
+      // Continue processing any aircraft data we did get
+    }
+
+    // Log sources used
+    if (result.sources) {
+      console.log(`Sources: ${result.sources.local} local, ${result.sources.opensky} OpenSky`);
     }
 
     // Process each aircraft

@@ -26,17 +26,21 @@ module.exports = {
     // You can add it here once you find the hex code
   ],
 
-  // OpenSky Network API settings
+  // Local dump1090-fa receiver (primary source)
+  dump1090: {
+    enabled: true,
+    url: 'http://100.92.158.48/dump1090/data/aircraft.json'
+  },
+
+  // OpenSky Network API settings (fallback for out-of-range aircraft)
   opensky: {
-    // Optional: Add your OpenSky credentials for higher rate limits
-    // Create account at: https://opensky-network.org/
-    username: null,  // Set to your username or leave null for anonymous
-    password: null,  // Set to your password or leave null for anonymous
+    // OAuth credentials (new API format)
+    // Load from credentials.json
+    credentialsFile: './credentials.json',
 
     // Poll interval in milliseconds
-    // Anonymous: use 60000 (60 seconds) to stay within rate limits
-    // Authenticated: can use 30000 (30 seconds) or faster
-    pollInterval: 60000
+    // With authentication: can poll every 30 seconds
+    pollInterval: 30000
   },
 
   // Server settings
