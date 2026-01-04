@@ -1,4 +1,4 @@
-const fetch = require('node-fetch');
+// Using Node.js built-in fetch (available in Node 18+)
 
 class OpenSkyClient {
   constructor(username = null, password = null) {
