@@ -5,6 +5,20 @@ function initStatusTable() {
   console.log('Status table initialized');
 }
 
+// Calculate staleness for table display
+function getStalenessBadge(lastUpdated) {
+  if (!lastUpdated) return '<span class="staleness-badge staleness-unknown">Unknown</span>';
+
+  const now = Math.floor(Date.now() / 1000);
+  const ageSeconds = now - lastUpdated;
+  const ageMinutes = ageSeconds / 60;
+
+  if (ageMinutes < 5) return '<span class="staleness-badge staleness-active">Live</span>';
+  if (ageMinutes < 60) return '<span class="staleness-badge staleness-recent">Recent</span>';
+  if (ageMinutes < 1440) return '<span class="staleness-badge staleness-stale">Stale</span>';
+  return '<span class="staleness-badge staleness-very-stale">Old</span>';
+}
+
 async function updateStatusTable() {
   try {
     const response = await fetch('/api/fleet/current');
@@ -13,7 +27,7 @@ async function updateStatusTable() {
     const tbody = document.getElementById('status-table-body');
 
     if (aircraft.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5" class="no-data">No aircraft data available</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" class="no-data">No aircraft data available</td></tr>';
       return;
     }
 
@@ -40,10 +54,14 @@ async function updateStatusTable() {
           lastUpdate = 'Just now';
         } else if (diffMinutes < 60) {
           lastUpdate = `${diffMinutes} min ago`;
+        } else if (diffMinutes < 1440) {
+          lastUpdate = `${Math.floor(diffMinutes / 60)} hours ago`;
         } else {
-          lastUpdate = updateTime.toLocaleTimeString();
+          lastUpdate = `${Math.floor(diffMinutes / 1440)} days ago`;
         }
       }
+
+      const stalenessBadge = getStalenessBadge(ac.last_updated);
 
       return `
         <tr>
@@ -57,6 +75,7 @@ async function updateStatusTable() {
           <td>${altitudeFt}</td>
           <td>${speedKts}</td>
           <td>${lastUpdate}</td>
+          <td>${stalenessBadge}</td>
         </tr>
       `;
     }).join('');
@@ -66,6 +85,6 @@ async function updateStatusTable() {
   } catch (error) {
     console.error('Error updating status table:', error);
     const tbody = document.getElementById('status-table-body');
-    tbody.innerHTML = '<tr><td colspan="5" class="error">Error loading data</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="error">Error loading data</td></tr>';
   }
 }

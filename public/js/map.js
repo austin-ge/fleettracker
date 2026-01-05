@@ -20,9 +20,42 @@ function initMap() {
   console.log('Map initialized');
 }
 
+// Calculate staleness category based on last update time
+function getStalenessLevel(lastUpdated) {
+  if (!lastUpdated) return 'unknown';
+
+  const now = Math.floor(Date.now() / 1000);
+  const ageSeconds = now - lastUpdated;
+  const ageMinutes = ageSeconds / 60;
+
+  if (ageMinutes < 5) return 'active';      // Less than 5 minutes
+  if (ageMinutes < 60) return 'recent';     // 5-60 minutes
+  if (ageMinutes < 1440) return 'stale';    // 1-24 hours
+  return 'very_stale';                       // Over 24 hours
+}
+
+// Get color based on staleness and ground status
+function getAircraftColor(lastUpdated, isOnGround) {
+  const staleness = getStalenessLevel(lastUpdated);
+
+  // If on ground, always use ground color
+  if (isOnGround) {
+    return staleness === 'active' || staleness === 'recent' ? '#6c757d' : '#999999';
+  }
+
+  // Airborne colors based on staleness
+  switch (staleness) {
+    case 'active': return '#28a745';   // Green - active
+    case 'recent': return '#ffc107';   // Yellow - recent
+    case 'stale': return '#ff8c00';    // Orange - stale
+    case 'very_stale': return '#999999'; // Gray - very stale
+    default: return '#cccccc';         // Light gray - unknown
+  }
+}
+
 // Create custom aircraft icon
-function createAircraftIcon(heading, isOnGround) {
-  const color = isOnGround ? '#6c757d' : '#28a745';
+function createAircraftIcon(heading, isOnGround, lastUpdated) {
+  const color = getAircraftColor(lastUpdated, isOnGround);
   const rotation = heading || 0;
 
   return L.divIcon({
@@ -67,12 +100,12 @@ function updateAircraftMarker(aircraft) {
     // Update existing marker
     const marker = aircraftMarkers[icao24];
     marker.setLatLng(position);
-    marker.setIcon(createAircraftIcon(heading, isOnGround));
+    marker.setIcon(createAircraftIcon(heading, isOnGround, last_updated));
     marker.setPopupContent(createPopupContent(aircraft));
   } else {
     // Create new marker
     const marker = L.marker(position, {
-      icon: createAircraftIcon(heading, isOnGround)
+      icon: createAircraftIcon(heading, isOnGround, last_updated)
     });
 
     marker.bindPopup(createPopupContent(aircraft));
@@ -87,12 +120,38 @@ function updateAircraftMarker(aircraft) {
   }
 }
 
+// Format time ago string
+function formatTimeAgo(timestamp) {
+  if (!timestamp) return 'Never';
+
+  const now = Math.floor(Date.now() / 1000);
+  const seconds = now - timestamp;
+
+  if (seconds < 60) return 'Just now';
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} minutes ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)} hours ago`;
+  return `${Math.floor(seconds / 86400)} days ago`;
+}
+
 // Create popup content for aircraft marker
 function createPopupContent(aircraft) {
   const altitudeFt = aircraft.altitude ? Math.round(aircraft.altitude * 3.28084) : 'N/A';
   const speedKts = aircraft.velocity ? Math.round(aircraft.velocity * 1.94384) : 'N/A';
   const status = aircraft.on_ground === 1 ? 'On Ground' : 'Airborne';
   const lastUpdate = aircraft.last_updated ? new Date(aircraft.last_updated * 1000).toLocaleTimeString() : 'N/A';
+  const timeAgo = formatTimeAgo(aircraft.last_updated);
+  const staleness = getStalenessLevel(aircraft.last_updated);
+
+  // Staleness indicator
+  let stalenessClass = '';
+  let stalenessLabel = '';
+  switch (staleness) {
+    case 'active': stalenessClass = 'text-success'; stalenessLabel = 'Live'; break;
+    case 'recent': stalenessClass = 'text-warning'; stalenessLabel = 'Recent'; break;
+    case 'stale': stalenessClass = 'text-orange'; stalenessLabel = 'Stale'; break;
+    case 'very_stale': stalenessClass = 'text-muted'; stalenessLabel = 'Old'; break;
+    default: stalenessClass = 'text-muted'; stalenessLabel = 'Unknown';
+  }
 
   return `
     <div class="aircraft-popup">
@@ -103,6 +162,7 @@ function createPopupContent(aircraft) {
       <p><strong>Speed:</strong> ${speedKts} kts</p>
       <p><strong>Heading:</strong> ${aircraft.heading ? Math.round(aircraft.heading) + '°' : 'N/A'}</p>
       <p><strong>Last Update:</strong> ${lastUpdate}</p>
+      <p><strong>Last Seen:</strong> <span class="${stalenessClass}">${timeAgo}</span> <span class="badge ${stalenessClass}">${stalenessLabel}</span></p>
     </div>
   `;
 }

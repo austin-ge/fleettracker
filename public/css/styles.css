@@ -165,6 +165,40 @@ header h1 {
   color: #856404;
 }
 
+/* Staleness badges */
+.staleness-badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.staleness-active {
+  background-color: #d4edda;
+  color: #155724;
+}
+
+.staleness-recent {
+  background-color: #fff3cd;
+  color: #856404;
+}
+
+.staleness-stale {
+  background-color: #ffe5cc;
+  color: #cc5200;
+}
+
+.staleness-very-stale {
+  background-color: #e2e3e5;
+  color: #6c757d;
+}
+
+.staleness-unknown {
+  background-color: #f8f9fa;
+  color: #6c757d;
+}
+
 /* Statistics */
 .aircraft-stats {
   margin-bottom: 2rem;
