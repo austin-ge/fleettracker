@@ -1,104 +1,156 @@
-# Deployment Guide - Dockploy (Hostinger VPS)
+# Deployment Guide - Dokploy (Hostinger VPS)
 
-This guide explains how to deploy Fleet Tracker to your Hostinger VPS using Dockploy.
+This guide explains how to deploy Fleet Tracker to your Hostinger VPS using Dokploy.
 
 ## Prerequisites
 
-- Hostinger VPS with Dockploy installed
+- Hostinger VPS with Dokploy installed (minimum 2GB RAM, 30GB disk)
 - GitHub repository with this codebase
 - OpenSky Network API credentials (optional but recommended for better rate limits)
 
-## Deployment Steps
+## Deployment Options
 
-### 1. Prepare Your Repository
+Dokploy offers two deployment approaches:
 
-Ensure all Docker files are committed to your GitHub repository:
-- `Dockerfile`
-- `.dockerignore`
-- `docker-compose.yml`
+### Option A: Build on Server (Simpler, but resource-intensive)
+The server builds your Docker image directly. Can cause timeout/freezing on small VPS.
 
-```bash
-git add Dockerfile .dockerignore docker-compose.yml DEPLOYMENT.md
-git commit -m "Add Docker configuration for Dockploy deployment"
-git push origin main
-```
+### Option B: CI/CD Build (Recommended for production)
+Use GitHub Actions to build and push images to Docker Hub. Server only pulls and runs.
 
-### 2. Configure Dockploy
+**This guide covers Option A first (simpler for getting started).**
 
-1. Access your Dockploy dashboard at your VPS domain (e.g., `https://your-vps-domain.com`)
-2. Click "Create New Application"
-3. Choose "Git Repository" as the source
-4. Connect your GitHub repository
+---
 
-### 3. Application Configuration
+## Option A: Direct Build Deployment
+
+### Step 1: Connect GitHub to Dokploy
+
+1. **Access Dokploy Dashboard**: Navigate to your VPS Dokploy panel (e.g., `https://your-vps-domain.com`)
+
+2. **Connect GitHub**:
+   - Go to **Settings** → **Git** section
+   - Select **GitHub** as your source
+   - Click **"Create Github App"**
+   - Give it a name (e.g., `Fleet-Tracker-App`)
+   - Click through to GitHub authorization
+   - Choose repository access: **"Only select repositories"** → Select `fleettracker`
+   - Click **"Install & Authorize"**
+
+3. **Verify Connection**: You should see your GitHub account connected in the Git section
+
+### Step 2: Create New Application
+
+1. **Create Project** (optional but recommended for organization):
+   - Click **"Create Project"** in the sidebar
+   - Name it `Fleet Tracker`
+   - Click **Create**
+
+2. **Add Application**:
+   - Inside your project, click **"Create Application"** or **"Add Service"**
+   - Select **"Application"** (not Docker Compose)
+
+### Step 3: Configure Application
+
+**General Settings:**
+- **Name**: `fleettracker`
+- **Description**: Aircraft tracking application
+
+**Source Code Settings:**
+- **Provider**: GitHub
+- **Repository**: Select `austin-ge/fleettracker`
+- **Branch**: `main`
+- **Build Path**: `/` (root)
 
 **Build Settings:**
-- **Build Method**: Docker
-- **Dockerfile Path**: `./Dockerfile`
-- **Build Context**: `/` (root of repository)
+- **Build Type**: Select **"Dockerfile"**
+- **Dockerfile Path**: `./Dockerfile` (or just `Dockerfile`)
 
-**Port Configuration:**
-- **Container Port**: 3000
-- **Public Port**: 80 (or 443 if using HTTPS)
+### Step 4: Configure Ports & Domains
 
-**Volume Mounts** (Important for data persistence):
-Add the following volume to persist your SQLite database:
-- **Host Path**: `/var/lib/dockploy/volumes/fleettracker/database`
-- **Container Path**: `/app/database`
+**Ports:**
+- **Container Port**: `3000`
+- **Published**: Toggle ON
+- Click **"Add Port"**
 
-### 4. Environment Variables & Secrets
+**Domain:**
+- Option 1: Use auto-generated domain (e.g., `fleettracker.traefik.me`)
+- Option 2: Add your custom domain
+  - Click **"Add Domain"**
+  - Enter your domain (e.g., `fleet.yourdomain.com`)
+  - Make sure DNS points to your VPS IP
 
-You have two options for handling OpenSky credentials:
+### Step 5: Configure Mounts (Database Persistence)
 
-#### Option A: Environment Variables (Recommended for Dockploy)
-Add these environment variables in Dockploy:
-```
-OPENSKY_USERNAME=your_opensky_username
-OPENSKY_PASSWORD=your_opensky_password
-```
+**CRITICAL: Add volume mount for SQLite database**
 
-Then modify `config.js` to read from environment variables:
-```javascript
-opensky: {
-  username: process.env.OPENSKY_USERNAME || '',
-  password: process.env.OPENSKY_PASSWORD || '',
-  pollInterval: 30000
-}
-```
+1. Go to **"Mounts"** section
+2. Click **"Add Mount"**
+3. Configure:
+   - **Type**: Volume
+   - **Volume Name**: `fleettracker-database` (Dokploy will create it)
+   - **Mount Path**: `/app/database`
+   - Click **Save**
 
-#### Option B: Credentials File
-If you prefer to use `credentials.json`:
-1. Create the file on your VPS at `/var/lib/dockploy/volumes/fleettracker/credentials.json`
-2. Add volume mount in Dockploy:
-   - **Host Path**: `/var/lib/dockploy/volumes/fleettracker/credentials.json`
-   - **Container Path**: `/app/credentials.json`
-   - **Read Only**: Yes
+### Step 6: Environment Variables (Optional)
 
-### 5. Health Check Configuration
+If you want to use environment variables for OpenSky credentials:
 
-Dockploy should automatically detect the health check from the Dockerfile:
-- **Endpoint**: `/api/fleet/current`
-- **Interval**: 30 seconds
-- **Timeout**: 3 seconds
+1. Go to **"Environment"** section
+2. Click **"Add Variable"**
+3. Add variables:
+   - `OPENSKY_USERNAME`: `your_opensky_username`
+   - `OPENSKY_PASSWORD`: `your_opensky_password`
 
-### 6. Deploy
+*Note: This requires modifying `config.js` to read from `process.env`. For now, the app uses `credentials.json` file which is already in your Docker image.*
 
-1. Click "Deploy" in Dockploy
-2. Monitor the build logs
-3. Once deployed, the application will be available at your configured domain/port
+### Step 7: Advanced Settings (Optional but Recommended)
 
-### 7. Post-Deployment Verification
+**Health Check:**
+1. Go to **"Advanced"** section
+2. Enable **Health Check**
+3. Configure:
+   - **Path**: `/api/fleet/current`
+   - **Interval**: 30s
+   - **Timeout**: 3s
+   - **Retries**: 3
 
-Test your deployment:
+**Auto Deploy:**
+- In the **"Advanced"** section, toggle **"Auto Deploy"** ON
+- This automatically redeploys when you push to the `main` branch
+
+**Restart Policy:**
+- Set to **"unless-stopped"** (default)
+
+### Step 8: Deploy!
+
+1. Click the **"Deploy"** button (top right)
+2. **Monitor Build Logs**: Click on **"Logs"** tab to watch the build progress
+   - This may take 5-10 minutes on first build
+   - Watch for any errors during `npm install` or Docker build
+3. Wait for deployment to complete
+
+### Step 9: Access Your Application
+
+Once deployed:
+- **Via Auto Domain**: `http://fleettracker.traefik.me` (or your assigned subdomain)
+- **Via Custom Domain**: `http://yourdomain.com` (if configured)
+
+**Test the API:**
 ```bash
-# Check if the API is responding
-curl http://your-vps-domain.com/api/fleet/current
-
-# Check health status
-curl http://your-vps-domain.com/api/fleet/current
+curl http://your-domain/api/fleet/current
 ```
 
-Open your browser and navigate to your VPS domain to see the map interface.
+Open in browser to see the map interface!
+
+### Step 10: Enable HTTPS (Recommended)
+
+Dokploy uses Traefik with automatic Let's Encrypt certificates:
+
+1. Ensure your domain DNS points to your VPS IP
+2. In your application's **Domain** settings, enable **"HTTPS"**
+3. Toggle **"Generate Certificate"**
+4. Dokploy will automatically obtain and renew SSL certificates
 
 ## Configuration Notes
 
@@ -138,48 +190,88 @@ opensky: {
 }
 ```
 
+---
+
+## Monitoring & Logs
+
+Dokploy provides built-in monitoring:
+
+1. **Real-time Logs**: Go to **Logs** tab to see application output
+2. **Resource Usage**: View CPU, memory, disk, and network graphs in **Monitoring** section
+3. **Deployment History**: See past deployments and rollback if needed
+
+---
+
 ## Troubleshooting
+
+### Build Timeout / Server Freezing
+
+**Problem**: Build consumes too much RAM/CPU, causing timeout.
+
+**Solutions**:
+1. Upgrade VPS to at least 2GB RAM
+2. OR use Option B: CI/CD Build (see below)
+3. Check build logs for specific errors
 
 ### Container Fails to Start
 
-Check logs in Dockploy dashboard. Common issues:
-- Missing environment variables
-- Database permissions issues
-- Port conflicts
+1. Go to **Logs** tab and check for errors
+2. Common issues:
+   - Missing `credentials.json` file (app will work without it, using anonymous OpenSky API)
+   - Port 3000 already in use
+   - Database permission issues
 
 ### Database Not Persisting
 
-Ensure volume mount is correctly configured:
-- Host path exists and is writable
-- Container path is `/app/database`
-- Check file permissions on host
+Ensure volume mount is configured:
+- Go to **Mounts** section
+- Verify mount path is `/app/database`
+- Check that volume is created in Dokploy
 
-### No Aircraft Data
+### No Aircraft Data Showing
 
 - Verify ICAO24 codes are correct in `config.js`
-- Check OpenSky API credentials are valid
-- Ensure aircraft are currently transmitting ADS-B
-- Check rate limit errors in application logs
+- Check if aircraft are currently airborne and transmitting ADS-B
+- View logs for OpenSky API rate limit errors
+- Anonymous API has limited credits (400/day)
 
-### Build Failures
+### Build Fails with `better-sqlite3` Errors
 
-If you encounter `better-sqlite3` build errors:
-- Dockerfile includes required build dependencies (python3, make, g++)
-- Using Node 18 Alpine image which is compatible
-- Try clearing Dockploy build cache and rebuilding
+The Dockerfile includes all required dependencies. If build still fails:
+- Check Node version (should be 18)
+- Verify build tools (python3, make, g++) are installing
+- Try redeploying to clear cache
+
+### Domain Not Working
+
+- Verify DNS points to your VPS IP address
+- Check if port 80/443 are open in VPS firewall
+- Wait a few minutes for DNS propagation
+- Try accessing via IP:PORT first
+
+---
 
 ## Updating the Application
 
-To update your deployment:
+### With Auto-Deploy (Recommended)
 
-1. Make changes to your code locally
+If you enabled Auto Deploy in Step 7:
+
+1. Make changes locally
 2. Commit and push to GitHub:
    ```bash
    git add .
    git commit -m "Your update message"
    git push origin main
    ```
-3. In Dockploy, click "Rebuild" or enable auto-deploy on push
+3. Dokploy automatically detects and redeploys!
+
+### Manual Redeploy
+
+1. Make and push your changes to GitHub
+2. In Dokploy, go to your application
+3. Click **"Redeploy"** button
+4. Monitor build logs
 
 ## Backup Considerations
 
@@ -214,12 +306,81 @@ Database grows approximately 10-50MB per month depending on polling frequency an
 3. **Credentials**: Use environment variables, never commit `credentials.json` to git
 4. **Updates**: Keep Dockploy and base images updated regularly
 
-## Alternative: Using Compose File
+---
 
-If Dockploy supports docker-compose deployment:
+## Option B: CI/CD Build with GitHub Actions (Recommended for Production)
 
-1. Select "Docker Compose" as build method
-2. Point to `docker-compose.yml`
-3. Dockploy will handle the rest
+If your VPS has limited resources or builds are timing out, use GitHub Actions to build the image and push to Docker Hub. Your VPS only pulls and runs the pre-built image.
 
-This method may be simpler but check Dockploy documentation for compose support.
+### Prerequisites
+
+- Docker Hub account (free): https://hub.docker.com
+- GitHub repository (already have this)
+
+### Steps
+
+1. **Create GitHub Secrets**:
+   - Go to your GitHub repo → Settings → Secrets and variables → Actions
+   - Add secrets:
+     - `DOCKERHUB_USERNAME`: your Docker Hub username
+     - `DOCKERHUB_TOKEN`: Docker Hub access token (create in Docker Hub → Account Settings → Security)
+
+2. **Create GitHub Actions Workflow**:
+   Create `.github/workflows/deploy.yml`:
+   ```yaml
+   name: Build and Push Docker Image
+
+   on:
+     push:
+       branches: [ main ]
+
+   jobs:
+     build:
+       runs-on: ubuntu-latest
+       steps:
+         - uses: actions/checkout@v3
+
+         - name: Login to Docker Hub
+           uses: docker/login-action@v2
+           with:
+             username: ${{ secrets.DOCKERHUB_USERNAME }}
+             password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+         - name: Build and push
+           uses: docker/build-push-action@v4
+           with:
+             context: .
+             push: true
+             tags: ${{ secrets.DOCKERHUB_USERNAME }}/fleettracker:latest
+   ```
+
+3. **Configure Dokploy for Pre-built Image**:
+   - Create Application in Dokploy
+   - Select **"Docker"** (not GitHub)
+   - **Image**: `yourusername/fleettracker:latest`
+   - Configure ports, volumes, environment same as Option A
+   - Enable **"Auto Deploy"** with webhook from Docker Hub
+
+4. **Deploy**: Push to GitHub → Actions builds → Pushes to Docker Hub → Dokploy auto-deploys
+
+**Benefits**:
+- No build load on VPS
+- Faster deployments
+- No build timeouts
+- Better for production
+
+---
+
+## Using Docker Compose (Alternative)
+
+Dokploy also supports docker-compose deployments:
+
+1. In Dokploy, select **"Docker Compose"** (not Application)
+2. **Provider**: GitHub
+3. **Repository**: Select your repo
+4. **Compose File Path**: `docker-compose.yml`
+5. Deploy
+
+This uses the `docker-compose.yml` file already in your repo.
+
+---
