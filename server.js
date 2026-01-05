@@ -52,6 +52,15 @@ app.use('/api/user', aircraftRoutes);
 // Serve static files from public directory
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Root route - redirect to login page
+app.get('/', (req, res) => {
+  if (req.session && req.session.userId) {
+    res.redirect('/dashboard.html');
+  } else {
+    res.redirect('/login.html');
+  }
+});
+
 // API Endpoints (Protected - require authentication)
 
 // Get current state of user's aircraft
