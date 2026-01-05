@@ -32,7 +32,13 @@ module.exports = {
     url: 'http://100.92.158.48/dump1090/data/aircraft.json'
   },
 
-  // OpenSky Network API settings (fallback for out-of-range aircraft)
+  // adsb.lol API (secondary fallback - free, community-run)
+  adsbLol: {
+    enabled: true,
+    baseUrl: 'https://api.adsb.lol/v2'
+  },
+
+  // OpenSky Network API settings (tertiary fallback for out-of-range aircraft)
   opensky: {
     // OAuth credentials (new API format)
     // Load from credentials.json
