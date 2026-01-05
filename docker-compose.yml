@@ -5,8 +5,10 @@ services:
     build: .
     container_name: fleettracker
     restart: unless-stopped
-    ports:
-      - "3000:3000"
+    # Port is exposed in Dockerfile, Traefik/Dokploy handles routing
+    # No need to publish ports to host when using Traefik
+    expose:
+      - "3000"
     volumes:
       # Persist SQLite database
       - ./database:/app/database
