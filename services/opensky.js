@@ -10,13 +10,21 @@ class OpenSkyClient {
     this.accessToken = null;
     this.tokenExpiry = null;
 
-    // Load OAuth credentials if provided
-    if (credentialsPath) {
+    // Try environment variables first (recommended for production)
+    if (process.env.OPENSKY_CLIENT_ID && process.env.OPENSKY_CLIENT_SECRET) {
+      this.credentials = {
+        clientId: process.env.OPENSKY_CLIENT_ID,
+        clientSecret: process.env.OPENSKY_CLIENT_SECRET
+      };
+      console.log('OpenSky OAuth credentials loaded from environment variables');
+    }
+    // Fallback to credentials file if provided
+    else if (credentialsPath) {
       try {
         const fullPath = path.resolve(credentialsPath);
         const credData = fs.readFileSync(fullPath, 'utf8');
         this.credentials = JSON.parse(credData);
-        console.log('OpenSky OAuth credentials loaded');
+        console.log('OpenSky OAuth credentials loaded from file');
       } catch (error) {
         console.warn(`Could not load OpenSky credentials: ${error.message}`);
       }
