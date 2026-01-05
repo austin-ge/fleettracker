@@ -1,9 +1,6 @@
 # Fleet Tracker Dockerfile
 FROM node:18-alpine
 
-# Install build dependencies for better-sqlite3
-RUN apk add --no-cache python3 make g++
-
 # Set working directory
 WORKDIR /app
 
@@ -15,10 +12,6 @@ RUN npm ci --only=production
 
 # Copy application files
 COPY . .
-
-# Create directory for SQLite database with proper permissions
-RUN mkdir -p /app/database && \
-    chmod 755 /app/database
 
 # Expose port
 EXPOSE 3000

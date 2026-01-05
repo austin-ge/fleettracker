@@ -18,7 +18,7 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 }
 
 // Process new aircraft state data
-function processAircraftState(aircraftData) {
+async function processAircraftState(aircraftData) {
   const { icao24, latitude, longitude, altitude, velocity, heading, verticalRate, onGround, lastContact } = aircraftData;
 
   // Skip if missing critical data
@@ -28,10 +28,10 @@ function processAircraftState(aircraftData) {
   }
 
   // Get previous state
-  const previousState = db.getCurrentState(icao24);
+  const previousState = await db.getCurrentState(icao24);
 
   // Save position to history
-  db.savePosition(
+  await db.savePosition(
     icao24,
     lastContact,
     latitude,
@@ -44,7 +44,7 @@ function processAircraftState(aircraftData) {
   );
 
   // Update current state
-  db.updateCurrentState(
+  await db.updateCurrentState(
     icao24,
     lastContact,
     latitude,
@@ -60,10 +60,10 @@ function processAircraftState(aircraftData) {
     const stateChange = detectStateChange(aircraftData, previousState);
 
     if (stateChange) {
-      handleStateChange(icao24, stateChange, aircraftData, previousState);
+      await handleStateChange(icao24, stateChange, aircraftData, previousState);
     } else {
       // Update ongoing flight data
-      updateOngoingFlight(icao24, aircraftData, previousState);
+      await updateOngoingFlight(icao24, aircraftData, previousState);
     }
   } else {
     // First time seeing this aircraft
@@ -72,7 +72,7 @@ function processAircraftState(aircraftData) {
     // If already airborne, create an in-progress flight
     if (!onGround && altitude && altitude > 50 && velocity && velocity > 15) {
       console.log(`${icao24} is already airborne, creating in-progress flight`);
-      const flightId = db.createFlight(icao24, lastContact, latitude, longitude, altitude);
+      const flightId = await db.createFlight(icao24, lastContact, latitude, longitude, altitude);
       activeFlights.set(icao24, flightId);
     }
   }
@@ -102,12 +102,12 @@ function detectStateChange(newState, previousState) {
 }
 
 // Handle detected state change
-function handleStateChange(icao24, eventType, newState, previousState) {
+async function handleStateChange(icao24, eventType, newState, previousState) {
   if (eventType === 'TAKEOFF') {
     console.log(`✈️  TAKEOFF detected for ${icao24}`);
 
     // Create new flight record
-    const flightId = db.createFlight(
+    const flightId = await db.createFlight(
       icao24,
       newState.lastContact,
       newState.latitude,
@@ -126,7 +126,7 @@ function handleStateChange(icao24, eventType, newState, previousState) {
 
     // If no active flight in memory, check database
     if (!flightId) {
-      const activeFlight = db.getActiveFlight(icao24);
+      const activeFlight = await db.getActiveFlight(icao24);
       if (activeFlight) {
         flightId = activeFlight.id;
       }
@@ -134,7 +134,7 @@ function handleStateChange(icao24, eventType, newState, previousState) {
 
     if (flightId) {
       // Calculate flight duration
-      const flight = db.getActiveFlight(icao24);
+      const flight = await db.getActiveFlight(icao24);
       const durationSeconds = newState.lastContact - flight.takeoff_time;
 
       // Calculate total distance
@@ -150,7 +150,7 @@ function handleStateChange(icao24, eventType, newState, previousState) {
       }
 
       // Update flight record with landing info
-      db.updateFlight(flightId, {
+      await db.updateFlight(flightId, {
         landingTime: newState.lastContact,
         landingLatitude: newState.latitude,
         landingLongitude: newState.longitude,
@@ -169,12 +169,12 @@ function handleStateChange(icao24, eventType, newState, previousState) {
 }
 
 // Update ongoing flight data (max altitude, distance)
-function updateOngoingFlight(icao24, newState, previousState) {
+async function updateOngoingFlight(icao24, newState, previousState) {
   // Check if there's an active flight
   let flightId = activeFlights.get(icao24);
 
   if (!flightId) {
-    const activeFlight = db.getActiveFlight(icao24);
+    const activeFlight = await db.getActiveFlight(icao24);
     if (activeFlight) {
       flightId = activeFlight.id;
       activeFlights.set(icao24, flightId);
@@ -182,7 +182,7 @@ function updateOngoingFlight(icao24, newState, previousState) {
   }
 
   if (flightId && !newState.onGround) {
-    const flight = db.getActiveFlight(icao24);
+    const flight = await db.getActiveFlight(icao24);
 
     const updates = {};
 
@@ -206,22 +206,22 @@ function updateOngoingFlight(icao24, newState, previousState) {
 
     // Update if there are changes
     if (Object.keys(updates).length > 0) {
-      db.updateFlight(flightId, updates);
+      await db.updateFlight(flightId, updates);
     }
   }
 }
 
 // Initialize active flights from database on startup
-function initializeActiveFlights() {
+async function initializeActiveFlights() {
   const config = require('../config');
 
-  config.aircraft.forEach(aircraft => {
-    const activeFlight = db.getActiveFlight(aircraft.icao24);
+  for (const aircraft of config.aircraft) {
+    const activeFlight = await db.getActiveFlight(aircraft.icao24);
     if (activeFlight) {
       activeFlights.set(aircraft.icao24, activeFlight.id);
       console.log(`Resumed tracking flight ${activeFlight.id} for ${aircraft.registration}`);
     }
-  });
+  }
 }
 
 module.exports = {

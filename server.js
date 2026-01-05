@@ -19,9 +19,9 @@ app.use(express.static(path.join(__dirname, 'public')));
 // API Endpoints
 
 // Get current state of all aircraft in the fleet
-app.get('/api/fleet/current', (req, res) => {
+app.get('/api/fleet/current', async (req, res) => {
   try {
-    const currentStates = db.getAllCurrentStates();
+    const currentStates = await db.getAllCurrentStates();
     res.json(currentStates);
   } catch (error) {
     console.error('Error fetching current states:', error);
@@ -30,10 +30,10 @@ app.get('/api/fleet/current', (req, res) => {
 });
 
 // Get recent position history for map trails
-app.get('/api/fleet/history', (req, res) => {
+app.get('/api/fleet/history', async (req, res) => {
   try {
     const hours = parseInt(req.query.hours) || 24;
-    const positions = db.getRecentPositions(hours);
+    const positions = await db.getRecentPositions(hours);
     res.json(positions);
   } catch (error) {
     console.error('Error fetching position history:', error);
@@ -42,11 +42,11 @@ app.get('/api/fleet/history', (req, res) => {
 });
 
 // Get flight history for a specific aircraft
-app.get('/api/flights/:icao24', (req, res) => {
+app.get('/api/flights/:icao24', async (req, res) => {
   try {
     const icao24 = req.params.icao24.toLowerCase();
     const limit = parseInt(req.query.limit) || 50;
-    const flights = db.getFlightHistory(icao24, limit);
+    const flights = await db.getFlightHistory(icao24, limit);
     res.json(flights);
   } catch (error) {
     console.error('Error fetching flight history:', error);
@@ -55,9 +55,9 @@ app.get('/api/flights/:icao24', (req, res) => {
 });
 
 // Get statistics for all aircraft
-app.get('/api/statistics', (req, res) => {
+app.get('/api/statistics', async (req, res) => {
   try {
-    const stats = db.getStatistics();
+    const stats = await db.getStatistics();
     res.json(stats);
   } catch (error) {
     console.error('Error fetching statistics:', error);
@@ -91,9 +91,9 @@ async function pollFleetData() {
     if (result.aircraft && result.aircraft.length > 0) {
       console.log(`Received data for ${result.aircraft.length} aircraft`);
 
-      result.aircraft.forEach(aircraftData => {
-        tracker.processAircraftState(aircraftData);
-      });
+      for (const aircraftData of result.aircraft) {
+        await tracker.processAircraftState(aircraftData);
+      }
     } else {
       console.log('No aircraft data received (aircraft may not be transmitting)');
     }
@@ -108,15 +108,15 @@ async function startServer() {
   console.log('Starting Fleet Tracker...');
 
   // Initialize database
-  db.initializeDatabase();
+  await db.initializeDatabase();
 
   // Insert aircraft from config into database
-  config.aircraft.forEach(aircraft => {
-    db.upsertAircraft(aircraft.icao24, aircraft.registration, aircraft.type);
-  });
+  for (const aircraft of config.aircraft) {
+    await db.upsertAircraft(aircraft.icao24, aircraft.registration, aircraft.type);
+  }
 
   // Initialize active flights from database
-  tracker.initializeActiveFlights();
+  await tracker.initializeActiveFlights();
 
   // Start Express server
   app.listen(PORT, () => {

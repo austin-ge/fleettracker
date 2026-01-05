@@ -1,16 +1,16 @@
--- Fleet Tracker Database Schema
+-- Fleet Tracker Database Schema (PostgreSQL)
 
 -- Aircraft table: stores your fleet configuration
 CREATE TABLE IF NOT EXISTS aircraft (
   icao24 TEXT PRIMARY KEY,
   registration TEXT NOT NULL,
   aircraft_type TEXT,
-  created_at INTEGER DEFAULT (strftime('%s', 'now'))
+  created_at INTEGER DEFAULT EXTRACT(EPOCH FROM NOW())::INTEGER
 );
 
 -- Positions table: stores all historical position data
 CREATE TABLE IF NOT EXISTS positions (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id SERIAL PRIMARY KEY,
   icao24 TEXT NOT NULL,
   timestamp INTEGER NOT NULL,
   latitude REAL,
@@ -28,7 +28,7 @@ CREATE INDEX IF NOT EXISTS idx_positions_icao24_time ON positions(icao24, timest
 
 -- Flights table: one record per flight for statistics
 CREATE TABLE IF NOT EXISTS flights (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id SERIAL PRIMARY KEY,
   icao24 TEXT NOT NULL,
   takeoff_time INTEGER,
   landing_time INTEGER,
@@ -55,6 +55,6 @@ CREATE TABLE IF NOT EXISTS current_state (
   velocity REAL,
   heading REAL,
   on_ground INTEGER NOT NULL,
-  last_updated INTEGER DEFAULT (strftime('%s', 'now')),
+  last_updated INTEGER DEFAULT EXTRACT(EPOCH FROM NOW())::INTEGER,
   FOREIGN KEY (icao24) REFERENCES aircraft(icao24)
 );

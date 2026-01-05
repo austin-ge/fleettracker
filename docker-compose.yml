@@ -9,13 +9,9 @@ services:
     # No need to publish ports to host when using Traefik
     expose:
       - "3000"
-    volumes:
-      # Persist SQLite database
-      - ./database:/app/database
-      # Optional: Mount credentials if you want to manage them outside the image
-      # - ./credentials.json:/app/credentials.json:ro
     environment:
       - NODE_ENV=production
+      - DATABASE_URL=postgresql://fleettracker:AirplaneSpy@fleettracker-db-ucgpcg:5432/fleettracker
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/fleet/current', (res) => { process.exit(res.statusCode === 200 ? 0 : 1); })"]
       interval: 30s

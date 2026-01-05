@@ -1,70 +1,77 @@
-const Database = require('better-sqlite3');
+const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
 
-// Initialize SQLite database
-const dbPath = path.join(__dirname, 'fleet.db');
-const db = new Database(dbPath);
+// Get database connection URL from environment or use default
+const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://fleettracker:AirplaneSpy@fleettracker-db-ucgpcg:5432/fleettracker';
 
-// Enable foreign keys
-db.pragma('foreign_keys = ON');
+// Create PostgreSQL connection pool
+const pool = new Pool({
+  connectionString: DATABASE_URL,
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+});
+
+// Handle pool errors
+pool.on('error', (err) => {
+  console.error('Unexpected error on idle client', err);
+});
 
 // Initialize database schema
-function initializeDatabase() {
+async function initializeDatabase() {
   const schemaPath = path.join(__dirname, 'schema.sql');
   const schema = fs.readFileSync(schemaPath, 'utf8');
 
-  // Execute schema (creates tables if they don't exist)
-  db.exec(schema);
-
-  console.log('Database initialized successfully');
+  const client = await pool.connect();
+  try {
+    // Execute schema (creates tables if they don't exist)
+    await client.query(schema);
+    console.log('Database initialized successfully');
+  } finally {
+    client.release();
+  }
 }
 
 // Insert or update aircraft in the fleet
-function upsertAircraft(icao24, registration, aircraftType) {
-  const stmt = db.prepare(`
+async function upsertAircraft(icao24, registration, aircraftType) {
+  await pool.query(`
     INSERT INTO aircraft (icao24, registration, aircraft_type)
-    VALUES (?, ?, ?)
+    VALUES ($1, $2, $3)
     ON CONFLICT(icao24) DO UPDATE SET
-      registration = excluded.registration,
-      aircraft_type = excluded.aircraft_type
-  `);
-
-  stmt.run(icao24, registration, aircraftType);
+      registration = EXCLUDED.registration,
+      aircraft_type = EXCLUDED.aircraft_type
+  `, [icao24, registration, aircraftType]);
 }
 
 // Save position data
-function savePosition(icao24, timestamp, latitude, longitude, altitude, velocity, heading, verticalRate, onGround) {
-  const stmt = db.prepare(`
+async function savePosition(icao24, timestamp, latitude, longitude, altitude, velocity, heading, verticalRate, onGround) {
+  await pool.query(`
     INSERT INTO positions (icao24, timestamp, latitude, longitude, altitude, velocity, heading, vertical_rate, on_ground)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-
-  stmt.run(icao24, timestamp, latitude, longitude, altitude, velocity, heading, verticalRate, onGround ? 1 : 0);
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+  `, [icao24, timestamp, latitude, longitude, altitude, velocity, heading, verticalRate, onGround ? 1 : 0]);
 }
 
 // Update current state
-function updateCurrentState(icao24, timestamp, latitude, longitude, altitude, velocity, heading, onGround) {
-  const stmt = db.prepare(`
+async function updateCurrentState(icao24, timestamp, latitude, longitude, altitude, velocity, heading, onGround) {
+  await pool.query(`
     INSERT INTO current_state (icao24, timestamp, latitude, longitude, altitude, velocity, heading, on_ground, last_updated)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, EXTRACT(EPOCH FROM NOW())::INTEGER)
     ON CONFLICT(icao24) DO UPDATE SET
-      timestamp = excluded.timestamp,
-      latitude = excluded.latitude,
-      longitude = excluded.longitude,
-      altitude = excluded.altitude,
-      velocity = excluded.velocity,
-      heading = excluded.heading,
-      on_ground = excluded.on_ground,
-      last_updated = strftime('%s', 'now')
-  `);
-
-  stmt.run(icao24, timestamp, latitude, longitude, altitude, velocity, heading, onGround ? 1 : 0);
+      timestamp = EXCLUDED.timestamp,
+      latitude = EXCLUDED.latitude,
+      longitude = EXCLUDED.longitude,
+      altitude = EXCLUDED.altitude,
+      velocity = EXCLUDED.velocity,
+      heading = EXCLUDED.heading,
+      on_ground = EXCLUDED.on_ground,
+      last_updated = EXTRACT(EPOCH FROM NOW())::INTEGER
+  `, [icao24, timestamp, latitude, longitude, altitude, velocity, heading, onGround ? 1 : 0]);
 }
 
 // Get current state for all aircraft
-function getAllCurrentStates() {
-  const stmt = db.prepare(`
+async function getAllCurrentStates() {
+  const result = await pool.query(`
     SELECT
       a.icao24,
       a.registration,
@@ -81,113 +88,114 @@ function getAllCurrentStates() {
     LEFT JOIN current_state cs ON a.icao24 = cs.icao24
   `);
 
-  return stmt.all();
+  return result.rows;
 }
 
 // Get current state for a specific aircraft
-function getCurrentState(icao24) {
-  const stmt = db.prepare(`
-    SELECT * FROM current_state WHERE icao24 = ?
-  `);
+async function getCurrentState(icao24) {
+  const result = await pool.query(`
+    SELECT * FROM current_state WHERE icao24 = $1
+  `, [icao24]);
 
-  return stmt.get(icao24);
+  return result.rows[0];
 }
 
 // Create a new flight record
-function createFlight(icao24, takeoffTime, latitude, longitude, altitude) {
-  const stmt = db.prepare(`
+async function createFlight(icao24, takeoffTime, latitude, longitude, altitude) {
+  const result = await pool.query(`
     INSERT INTO flights (icao24, takeoff_time, takeoff_latitude, takeoff_longitude, max_altitude)
-    VALUES (?, ?, ?, ?, ?)
-  `);
+    VALUES ($1, $2, $3, $4, $5)
+    RETURNING id
+  `, [icao24, takeoffTime, latitude, longitude, altitude]);
 
-  const result = stmt.run(icao24, takeoffTime, latitude, longitude, altitude);
-  return result.lastInsertRowid;
+  return result.rows[0].id;
 }
 
 // Update flight record (for landing or max altitude updates)
-function updateFlight(flightId, updates) {
+async function updateFlight(flightId, updates) {
   const fields = [];
   const values = [];
+  let paramCount = 1;
 
   if (updates.landingTime !== undefined) {
-    fields.push('landing_time = ?');
+    fields.push(`landing_time = $${paramCount++}`);
     values.push(updates.landingTime);
   }
   if (updates.landingLatitude !== undefined) {
-    fields.push('landing_latitude = ?');
+    fields.push(`landing_latitude = $${paramCount++}`);
     values.push(updates.landingLatitude);
   }
   if (updates.landingLongitude !== undefined) {
-    fields.push('landing_longitude = ?');
+    fields.push(`landing_longitude = $${paramCount++}`);
     values.push(updates.landingLongitude);
   }
   if (updates.maxAltitude !== undefined) {
-    fields.push('max_altitude = ?');
+    fields.push(`max_altitude = $${paramCount++}`);
     values.push(updates.maxAltitude);
   }
   if (updates.distanceKm !== undefined) {
-    fields.push('distance_km = ?');
+    fields.push(`distance_km = $${paramCount++}`);
     values.push(updates.distanceKm);
   }
   if (updates.durationSeconds !== undefined) {
-    fields.push('duration_seconds = ?');
+    fields.push(`duration_seconds = $${paramCount++}`);
     values.push(updates.durationSeconds);
   }
 
   if (fields.length === 0) return;
 
-  const stmt = db.prepare(`
-    UPDATE flights SET ${fields.join(', ')} WHERE id = ?
-  `);
+  values.push(flightId);
 
-  stmt.run(...values, flightId);
+  await pool.query(`
+    UPDATE flights SET ${fields.join(', ')} WHERE id = $${paramCount}
+  `, values);
 }
 
 // Get active flight (not yet landed) for an aircraft
-function getActiveFlight(icao24) {
-  const stmt = db.prepare(`
+async function getActiveFlight(icao24) {
+  const result = await pool.query(`
     SELECT * FROM flights
-    WHERE icao24 = ? AND landing_time IS NULL
+    WHERE icao24 = $1 AND landing_time IS NULL
     ORDER BY takeoff_time DESC
     LIMIT 1
-  `);
+  `, [icao24]);
 
-  return stmt.get(icao24);
+  return result.rows[0];
 }
 
 // Get recent positions for map history
-function getRecentPositions(hours = 24) {
+async function getRecentPositions(hours = 24) {
   const cutoffTime = Math.floor(Date.now() / 1000) - (hours * 3600);
 
-  const stmt = db.prepare(`
+  const result = await pool.query(`
     SELECT
       p.*,
       a.registration,
       a.aircraft_type
     FROM positions p
     JOIN aircraft a ON p.icao24 = a.icao24
-    WHERE p.timestamp > ?
+    WHERE p.timestamp > $1
     ORDER BY p.icao24, p.timestamp ASC
-  `);
+  `, [cutoffTime]);
 
-  return stmt.all(cutoffTime);
+  return result.rows;
 }
 
 // Get flight history for a specific aircraft
-function getFlightHistory(icao24, limit = 50) {
-  const stmt = db.prepare(`
+async function getFlightHistory(icao24, limit = 50) {
+  const result = await pool.query(`
     SELECT * FROM flights
-    WHERE icao24 = ? AND landing_time IS NOT NULL
+    WHERE icao24 = $1 AND landing_time IS NOT NULL
     ORDER BY takeoff_time DESC
-    LIMIT ?
-  `);
+    LIMIT $2
+  `, [icao24, limit]);
 
-  return stmt.all(icao24, limit);
+  return result.rows;
 }
 
 // Get statistics for all aircraft
-function getStatistics() {
-  const stmt = db.prepare(`
+async function getStatistics() {
+  const result = await pool.query(`
     SELECT
       a.icao24,
       a.registration,
@@ -199,28 +207,33 @@ function getStatistics() {
       COALESCE(MAX(f.max_altitude), 0) as max_altitude_ever
     FROM aircraft a
     LEFT JOIN flights f ON a.icao24 = f.icao24 AND f.landing_time IS NOT NULL
-    GROUP BY a.icao24
+    GROUP BY a.icao24, a.registration, a.aircraft_type
   `);
 
-  return stmt.all();
+  return result.rows;
 }
 
 // Clean up old position data
-function cleanupOldPositions(daysToKeep = 30) {
+async function cleanupOldPositions(daysToKeep = 30) {
   const cutoffTime = Math.floor(Date.now() / 1000) - (daysToKeep * 86400);
 
-  const stmt = db.prepare(`
-    DELETE FROM positions WHERE timestamp < ?
-  `);
+  const result = await pool.query(`
+    DELETE FROM positions WHERE timestamp < $1
+  `, [cutoffTime]);
 
-  const result = stmt.run(cutoffTime);
-  console.log(`Cleaned up ${result.changes} old position records`);
-  return result.changes;
+  console.log(`Cleaned up ${result.rowCount} old position records`);
+  return result.rowCount;
+}
+
+// Graceful shutdown
+async function closePool() {
+  await pool.end();
+  console.log('Database pool closed');
 }
 
 // Export functions
 module.exports = {
-  db,
+  pool,
   initializeDatabase,
   upsertAircraft,
   savePosition,
@@ -233,5 +246,6 @@ module.exports = {
   getRecentPositions,
   getFlightHistory,
   getStatistics,
-  cleanupOldPositions
+  cleanupOldPositions,
+  closePool
 };
