@@ -58,3 +58,33 @@ CREATE TABLE IF NOT EXISTS current_state (
   last_updated INTEGER DEFAULT EXTRACT(EPOCH FROM NOW())::INTEGER,
   FOREIGN KEY (icao24) REFERENCES aircraft(icao24)
 );
+
+-- Users table: stores user accounts
+CREATE TABLE IF NOT EXISTS users (
+  id SERIAL PRIMARY KEY,
+  email TEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,
+  created_at INTEGER DEFAULT EXTRACT(EPOCH FROM NOW())::INTEGER,
+  last_login INTEGER
+);
+
+-- Sessions table: stores express-session data
+CREATE TABLE IF NOT EXISTS sessions (
+  sid VARCHAR NOT NULL PRIMARY KEY,
+  sess JSON NOT NULL,
+  expire TIMESTAMP(6) NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_expire ON sessions(expire);
+
+-- User-Aircraft relationship: many-to-many
+CREATE TABLE IF NOT EXISTS user_aircraft (
+  user_id INTEGER NOT NULL,
+  icao24 TEXT NOT NULL,
+  added_at INTEGER DEFAULT EXTRACT(EPOCH FROM NOW())::INTEGER,
+  PRIMARY KEY (user_id, icao24),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (icao24) REFERENCES aircraft(icao24) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_aircraft_user ON user_aircraft(user_id);

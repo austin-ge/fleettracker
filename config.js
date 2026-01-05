@@ -49,6 +49,16 @@ module.exports = {
     pollInterval: 30000
   },
 
+  // Authentication settings
+  auth: {
+    // Session secret - MUST be set via environment variable in production
+    sessionSecret: process.env.SESSION_SECRET || 'change-me-in-production-please',
+    // Session max age: 7 days
+    sessionMaxAge: 7 * 24 * 60 * 60 * 1000,
+    // bcrypt rounds for password hashing
+    bcryptRounds: 10
+  },
+
   // Server settings
   server: {
     port: 3000

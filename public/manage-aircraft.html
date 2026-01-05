@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Manage Aircraft - Fleet Tracker</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <link rel="stylesheet" href="/css/styles.css">
+  <style>
+    .manage-container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+    .add-aircraft-form {
+      background: white;
+      padding: 2rem;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      margin-bottom: 2rem;
+    }
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr auto;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    input {
+      padding: 0.75rem;
+      border: 2px solid #e0e0e0;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+    input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+    .btn {
+      padding: 0.75rem 1.5rem;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .btn-primary {
+      background: #667eea;
+      color: white;
+    }
+    .btn-danger {
+      background: #dc3545;
+      color: white;
+    }
+    .aircraft-list {
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    .aircraft-item {
+      padding: 1rem;
+      border-bottom: 1px solid #eee;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .error { color: #dc3545; margin-top: 0.5rem; }
+  </style>
+</head>
+<body style="background: #f5f7fa;">
+  <div class="manage-container">
+    <h1><i class="fas fa-plane"></i> Manage Aircraft</h1>
+    <p style="margin-bottom: 2rem;"><a href="/dashboard.html">← Back to Dashboard</a></p>
+
+    <div class="add-aircraft-form">
+      <h2>Add Aircraft</h2>
+      <form id="add-form">
+        <div class="form-row">
+          <input type="text" id="icao24" placeholder="ICAO24 (e.g., a93270)" required pattern="[a-fA-F0-9]{6}" maxlength="6">
+          <input type="text" id="registration" placeholder="Registration (e.g., N692DA)">
+          <input type="text" id="aircraft_type" placeholder="Type (e.g., Cessna 172)">
+          <button type="submit" class="btn btn-primary">Add</button>
+        </div>
+        <p class="error" id="add-error" style="display:none;"></p>
+      </form>
+    </div>
+
+    <div class="aircraft-list">
+      <h2 style="padding: 1rem;">Your Aircraft</h2>
+      <div id="aircraft-list-body"></div>
+    </div>
+  </div>
+
+  <script>
+    // Auth check
+    fetch('/api/auth/me').then(r => { if (!r.ok) window.location.href = '/login.html'; });
+
+    // Load aircraft
+    async function loadAircraft() {
+      const res = await fetch('/api/user/aircraft');
+      const aircraft = await res.json();
+      const listBody = document.getElementById('aircraft-list-body');
+
+      if (aircraft.length === 0) {
+        listBody.innerHTML = '<p style="padding:1rem;text-align:center;color:#999;">No aircraft added yet</p>';
+        return;
+      }
+
+      listBody.innerHTML = aircraft.map(a => `
+        <div class="aircraft-item">
+          <div>
+            <strong>${a.registration}</strong> (${a.icao24})<br>
+            <small>${a.aircraft_type || 'Unknown type'}</small>
+          </div>
+          <button onclick="removeAircraft('${a.icao24}')" class="btn btn-danger">Remove</button>
+        </div>
+      `).join('');
+    }
+
+    // Add aircraft
+    document.getElementById('add-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errorEl = document.getElementById('add-error');
+      errorEl.style.display = 'none';
+
+      const data = {
+        icao24: document.getElementById('icao24').value.toLowerCase(),
+        registration: document.getElementById('registration').value || undefined,
+        aircraft_type: document.getElementById('aircraft_type').value || undefined
+      };
+
+      const res = await fetch('/api/user/aircraft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+
+      if (res.ok) {
+        document.getElementById('add-form').reset();
+        loadAircraft();
+      } else {
+        const err = await res.json();
+        errorEl.textContent = err.error;
+        errorEl.style.display = 'block';
+      }
+    });
+
+    // Remove aircraft
+    async function removeAircraft(icao24) {
+      if (!confirm('Remove this aircraft from your fleet?')) return;
+
+      await fetch(`/api/user/aircraft/${icao24}`, { method: 'DELETE' });
+      loadAircraft();
+    }
+
+    loadAircraft();
+  </script>
+</body>
+</html>

@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard - Fleet Tracker</title>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <!-- Font Awesome for icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="/css/styles.css">
+  <style>
+    .header-content {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .header-left h1 {
+      margin-bottom: 0.25rem;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .user-info {
+      color: white;
+      font-size: 14px;
+      opacity: 0.9;
+    }
+
+    .header-btn {
+      padding: 8px 16px;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      background: rgba(255, 255, 255, 0.1);
+      color: white;
+      border-radius: 6px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-decoration: none;
+      display: inline-block;
+    }
+
+    .header-btn:hover {
+      background: rgba(255, 255, 255, 0.2);
+      border-color: rgba(255, 255, 255, 0.5);
+    }
+
+    @media (max-width: 768px) {
+      .header-content {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header>
+      <div class="header-content">
+        <div class="header-left">
+          <h1><i class="fas fa-plane"></i> Fleet Tracker</h1>
+          <p class="subtitle">Real-time aircraft tracking powered by ADS-B</p>
+        </div>
+        <div class="header-right">
+          <span class="user-info" id="user-email"></span>
+          <a href="/manage-aircraft.html" class="header-btn">
+            <i class="fas fa-cog"></i> Manage Aircraft
+          </a>
+          <button onclick="logout()" class="header-btn">
+            <i class="fas fa-sign-out-alt"></i> Logout
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="main-content">
+      <!-- Map Section -->
+      <div class="map-section">
+        <div id="map"></div>
+      </div>
+
+      <!-- Data Section -->
+      <div class="data-section">
+        <!-- Flight Status Table -->
+        <div class="panel">
+          <h2><i class="fas fa-list"></i> Flight Status</h2>
+          <div id="status-table-container">
+            <table id="status-table">
+              <thead>
+                <tr>
+                  <th>Aircraft</th>
+                  <th>Status</th>
+                  <th>Altitude</th>
+                  <th>Speed</th>
+                  <th>Last Update</th>
+                  <th>Freshness</th>
+                </tr>
+              </thead>
+              <tbody id="status-table-body">
+                <tr>
+                  <td colspan="6" class="loading">Loading...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Statistics Panel -->
+        <div class="panel">
+          <h2><i class="fas fa-chart-bar"></i> Statistics</h2>
+          <div id="statistics-container">
+            <p class="loading">Loading statistics...</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer>
+      <p>Data provided by <a href="https://opensky-network.org/" target="_blank">OpenSky Network</a></p>
+    </footer>
+  </div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Custom JavaScript -->
+  <script src="/js/map.js"></script>
+  <script src="/js/table.js"></script>
+  <script src="/js/stats.js"></script>
+
+  <script>
+    // Check authentication and load user info
+    async function checkAuth() {
+      try {
+        const response = await fetch('/api/auth/me', {
+          credentials: 'same-origin'
+        });
+
+        if (!response.ok) {
+          // Not authenticated - redirect to login
+          window.location.href = '/login.html';
+          return false;
+        }
+
+        const user = await response.json();
+        document.getElementById('user-email').textContent = user.email;
+        return true;
+
+      } catch (error) {
+        console.error('Auth check failed:', error);
+        window.location.href = '/login.html';
+        return false;
+      }
+    }
+
+    // Logout function
+    async function logout() {
+      try {
+        await fetch('/api/auth/logout', {
+          method: 'POST',
+          credentials: 'same-origin'
+        });
+      } catch (error) {
+        console.error('Logout error:', error);
+      } finally {
+        window.location.href = '/login.html';
+      }
+    }
+
+    // Initialize everything when page loads
+    document.addEventListener('DOMContentLoaded', async () => {
+      console.log('Fleet Tracker initialized');
+
+      // Check authentication first
+      const authenticated = await checkAuth();
+      if (!authenticated) return;
+
+      // Initialize map
+      initMap();
+
+      // Initialize status table
+      initStatusTable();
+
+      // Initialize statistics
+      initStatistics();
+
+      // Start periodic updates (every 10 seconds)
+      setInterval(() => {
+        updateMap();
+        updateStatusTable();
+        updateStatistics();
+      }, 10000);
+    });
+  </script>
+</body>
+</html>

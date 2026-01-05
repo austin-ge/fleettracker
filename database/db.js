@@ -231,6 +231,131 @@ async function closePool() {
   console.log('Database pool closed');
 }
 
+// ============ User Management Functions ============
+
+// Create a new user
+async function createUser(email, passwordHash) {
+  const result = await pool.query(`
+    INSERT INTO users (email, password_hash)
+    VALUES ($1, $2)
+    RETURNING id, email, created_at
+  `, [email.toLowerCase(), passwordHash]);
+
+  return result.rows[0];
+}
+
+// Get user by email
+async function getUserByEmail(email) {
+  const result = await pool.query(`
+    SELECT id, email, password_hash, created_at, last_login
+    FROM users
+    WHERE email = $1
+  `, [email.toLowerCase()]);
+
+  return result.rows[0] || null;
+}
+
+// Get user by ID
+async function getUserById(userId) {
+  const result = await pool.query(`
+    SELECT id, email, created_at, last_login
+    FROM users
+    WHERE id = $1
+  `, [userId]);
+
+  return result.rows[0] || null;
+}
+
+// Update last login timestamp
+async function updateLastLogin(userId) {
+  const now = Math.floor(Date.now() / 1000);
+  await pool.query(`
+    UPDATE users SET last_login = $1 WHERE id = $2
+  `, [now, userId]);
+}
+
+// Get all aircraft for a specific user
+async function getUserAircraft(userId) {
+  const result = await pool.query(`
+    SELECT
+      a.icao24,
+      a.registration,
+      a.aircraft_type,
+      ua.added_at,
+      cs.latitude,
+      cs.longitude,
+      cs.altitude,
+      cs.velocity,
+      cs.heading,
+      cs.on_ground,
+      cs.last_updated
+    FROM user_aircraft ua
+    JOIN aircraft a ON ua.icao24 = a.icao24
+    LEFT JOIN current_state cs ON a.icao24 = cs.icao24
+    WHERE ua.user_id = $1
+    ORDER BY ua.added_at DESC
+  `, [userId]);
+
+  return result.rows;
+}
+
+// Add aircraft to user's fleet
+async function addAircraftToUser(userId, icao24) {
+  try {
+    await pool.query(`
+      INSERT INTO user_aircraft (user_id, icao24)
+      VALUES ($1, $2)
+      ON CONFLICT (user_id, icao24) DO NOTHING
+    `, [userId, icao24.toLowerCase()]);
+    return true;
+  } catch (error) {
+    console.error('Error adding aircraft to user:', error);
+    return false;
+  }
+}
+
+// Remove aircraft from user's fleet
+async function removeAircraftFromUser(userId, icao24) {
+  const result = await pool.query(`
+    DELETE FROM user_aircraft
+    WHERE user_id = $1 AND icao24 = $2
+  `, [userId, icao24.toLowerCase()]);
+
+  return result.rowCount > 0;
+}
+
+// Get all unique aircraft tracked by any user
+async function getAllTrackedAircraft() {
+  const result = await pool.query(`
+    SELECT DISTINCT icao24 FROM user_aircraft
+  `);
+
+  return result.rows.map(row => row.icao24);
+}
+
+// Get current states filtered by user's aircraft
+async function getUserCurrentStates(userId) {
+  const result = await pool.query(`
+    SELECT
+      a.icao24,
+      a.registration,
+      a.aircraft_type,
+      cs.latitude,
+      cs.longitude,
+      cs.altitude,
+      cs.velocity,
+      cs.heading,
+      cs.on_ground,
+      cs.last_updated
+    FROM user_aircraft ua
+    JOIN aircraft a ON ua.icao24 = a.icao24
+    LEFT JOIN current_state cs ON a.icao24 = cs.icao24
+    WHERE ua.user_id = $1
+  `, [userId]);
+
+  return result.rows;
+}
+
 // Export functions
 module.exports = {
   pool,
@@ -247,5 +372,15 @@ module.exports = {
   getFlightHistory,
   getStatistics,
   cleanupOldPositions,
-  closePool
+  closePool,
+  // User management
+  createUser,
+  getUserByEmail,
+  getUserById,
+  updateLastLogin,
+  getUserAircraft,
+  addAircraftToUser,
+  removeAircraftFromUser,
+  getAllTrackedAircraft,
+  getUserCurrentStates
 };
