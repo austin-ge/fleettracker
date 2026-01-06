@@ -18,6 +18,9 @@ const PORT = config.server.port;
 // Initialize hybrid data fetcher (dump1090 + OpenSky)
 const dataFetcher = new DataFetcher(config);
 
+// Trust proxy - required for secure cookies behind Traefik
+app.set('trust proxy', 1);
+
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
