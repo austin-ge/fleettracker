@@ -12,6 +12,7 @@ services:
     environment:
       - NODE_ENV=production
       - DATABASE_URL=postgresql://fleettracker:AirplaneSpy@fleettracker-db-ucgpcg:5432/fleettracker
+      - SESSION_SECRET=${SESSION_SECRET}
       - OPENSKY_CLIENT_ID=${OPENSKY_CLIENT_ID}
       - OPENSKY_CLIENT_SECRET=${OPENSKY_CLIENT_SECRET}
     healthcheck:
