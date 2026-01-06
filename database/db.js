@@ -274,6 +274,13 @@ async function updateLastLogin(userId) {
   `, [now, userId]);
 }
 
+// Update user password
+async function updateUserPassword(userId, newPasswordHash) {
+  await pool.query(`
+    UPDATE users SET password_hash = $1 WHERE id = $2
+  `, [newPasswordHash, userId]);
+}
+
 // Get all aircraft for a specific user
 async function getUserAircraft(userId) {
   const result = await pool.query(`
@@ -378,6 +385,7 @@ module.exports = {
   getUserByEmail,
   getUserById,
   updateLastLogin,
+  updateUserPassword,
   getUserAircraft,
   addAircraftToUser,
   removeAircraftFromUser,
